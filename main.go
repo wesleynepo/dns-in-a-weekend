@@ -3,10 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	"math/rand"
+	"net"
 	"strings"
 )
+const (
+    RECURSION_DESIRED = 1 << 8
+    CLASS_IN = 1
+    TYPE_A = 1
 
+)
 type DNSHeader struct {
     ID int 
     Flags int 
@@ -53,11 +59,37 @@ func encodeName(domain string) []byte {
     return buf.Bytes() 
 }
 
+func randomId() int {
+    return rand.Intn(65535)
+}
+
+func buildQuery(domain string, recordType int) []byte {
+    name := encodeName(domain)
+    header := DNSHeader{
+        ID:randomId(),
+        Flags: RECURSION_DESIRED,
+        NumQuestions: 1,
+        NumAnswers: 0,
+        NumAuthorities: 0,
+        NumAdditionals: 0,
+    }
+    question := DNSQuestion{
+        name: name,
+        Class: CLASS_IN,
+        Type: recordType,
+    }
+
+    b := make([]byte, 0)
+    b = append(b, header.toBytes()...)
+    b = append(b, question.toBytes()...)
+
+    return b
+}
+
 
 func main() {
-    h := DNSHeader{43690, 1 << 8, 1, 0, 0, 0}
-    fmt.Printf("%x\n", h.toBytes())
-    db := encodeName("example.com")
-    fmt.Printf("%x", db)
+    query := buildQuery("www.example.com", 1)
+    con, _ := net.Dial("udp", "8.8.8.8:53")
+    con.Write(query)
 }
 
