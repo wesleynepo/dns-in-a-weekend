@@ -104,9 +104,19 @@ func encodeName(domain string) []byte {
     return buf.Bytes() 
 }
 
+// refactor seems to complicated
 func decodeName(encoded []byte) string {
-    println(string(encoded))
-    return ""
+    var name string
+    var i int 
+    for  i < len(encoded) {
+        many := int(encoded[i])
+        if (i != 0 && many != 0) {
+            name += "."
+        }
+        name += (string(encoded[i+1:i+1+many]))
+        i += many + 1
+    }
+    return name
 }
 
 func randomId() int {
@@ -162,39 +172,40 @@ func newRecordFromBytes(response []byte, nameSize int, start int) DNSRecord {
     return DNSRecord{name, int(type_), int(class), int(ttl), data} 
 }
 
-func newRecordFromResponse(response *ResponseRead) DNSRecord {
+func getNameFromResponse(response *ResponseRead, nameSize int) []byte {
     var name []byte
+    index := 0
+    name = append(name, response.currentSlice()[:nameSize+1]...)
+    for spot, b := range name {
+        if b == 192 {
+            index = int(name[spot+1])
+        }
+    }
+    if index != 0 {
+        name = append(name[:len(name)-3], getNameFromByte(response.data, index)...)
+    }
+    return name
+}
+
+func newRecordFromResponse(response *ResponseRead) DNSRecord {
+    var data []byte
     record := response.currentSlice()
     nameSize, _ := findNameSize(record)
-
-    if (nameSize == 2) {
-      nameIndicaton := int(record[:nameSize][1])
-      name = getNameFromByte(response.data, nameIndicaton)
-    } else {
-      name = record[:nameSize+1]
-    }
+    name := getNameFromResponse(response, nameSize)
+    
     type_ := binary.BigEndian.Uint16(record[nameSize:nameSize+2])
     class := binary.BigEndian.Uint16(record[nameSize+2:nameSize+4])
     ttl := binary.BigEndian.Uint32(record[nameSize+4:nameSize+8])
     byteLen := binary.BigEndian.Uint16(record[nameSize+8:nameSize+10])
-    data :=record[nameSize+10:nameSize+10+int(byteLen)]
-    response.movePointer(nameSize+10+int(byteLen))
+    response.movePointer(nameSize+10)
+    if type_ == TYPE_NS {
+        data = getNameFromResponse(response, int(byteLen)-1)
+    } else {
+        data =record[nameSize+10:nameSize+10+int(byteLen)]
+    }
+    response.movePointer(int(byteLen))
     // move the pointer throught the data after parsing the record
     return DNSRecord{name, int(type_), int(class), int(ttl), data} 
-}
-
-
-
-func parseRecord(response []byte) {
-    header := newHeaderFromBytes(response[:12])
-    fmt.Println(header)
-    nameSize, _ := findNameSize(response[12:])
-    _ = newQuestionFromBytes(response[12:12+nameSize+5], nameSize)
-    nameSize2, _ := findNameSize(response[12+nameSize+5:])
-    start := 12+nameSize+5
-    record := newRecordFromBytes(response, nameSize2, start)
-    println(ipString(record.data))
-
 }
 
 func ipString(data []byte) string {
@@ -212,9 +223,15 @@ func findNameSize(b []byte) (int, error) {
 
 
 func main() {
+    ip := resolveIp("twitter.com")
+    print(ip)
+}
+
+func resolveIp(domain string) string {
     var packet DNSPacket
-    domain := "google.com"
     ip := "198.41.0.4"
+
+    print(domain + " -> ")
 
     for true {
         packet = run(domain, ip)
@@ -222,13 +239,18 @@ func main() {
         if (len(packet.answers) != 0) {
             break
         }
-        authority := getFirstIPV4(packet.additionals) 
-        ip = ipString(authority.data)
-        println(ip + " ->")
+
+        if (len(packet.additionals) == 0) {
+            nameServer := decodeName(packet.authorities[0].data)
+            ip = resolveIp(nameServer)
+        } else {
+            authority := getFirstIPV4(packet.additionals) 
+            ip = ipString(authority.data)
+        }
+        print(ip + " -> ")
     }
 
-    println(ipString(packet.answers[0].data))
-    println("Finish")
+    return ipString(packet.answers[0].data)
 }
 
 func getFirstIPV4(additionals []DNSRecord) DNSRecord {
@@ -245,7 +267,7 @@ func run(domain string, ip string) DNSPacket {
     query := buildQuery(domain, TYPE_A)
 
     con, err := net.Dial("udp", ip + ":53")
-    
+    defer con.Close()
     checkErr(err)
 
     con.Write(query)
@@ -255,7 +277,6 @@ func run(domain string, ip string) DNSPacket {
     _, err = con.Read(reply)
 
     checkErr(err)
-    con.Close()
 
     return parse(reply)
 }
