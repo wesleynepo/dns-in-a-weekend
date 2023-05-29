@@ -7,6 +7,7 @@ import (
 
 const (
     UINT16_SIZE = 2
+    UINT32_SIZE = 4
 )
 
 type ResponseRead struct {
@@ -67,20 +68,19 @@ func (r *ResponseRead) parseRecord() DNSRecord {
     record := r.currentSlice()
     nameSize := findNameSize(record)
     name := getNameFromResponse(r, nameSize)
+    r.movePointer(nameSize)
     
-    type_ := binary.BigEndian.Uint16(record[nameSize:nameSize+2])
-    class := binary.BigEndian.Uint16(record[nameSize+2:nameSize+4])
-    ttl := binary.BigEndian.Uint32(record[nameSize+4:nameSize+8])
-    byteLen := binary.BigEndian.Uint16(record[nameSize+8:nameSize+10])
-    r.movePointer(nameSize+10)
+    type_ := r.readInt() 
+    class := r.readInt() 
+    ttl := r.readInt32() 
+    byteLen := r.readInt() 
     if type_ == TYPE_NS {
         data = getNameFromResponse(r, int(byteLen)-1)
     } else {
         data =record[nameSize+10:nameSize+10+int(byteLen)]
     }
     r.movePointer(int(byteLen))
-    // move the pointer throught the data after parsing the record
-    return DNSRecord{name, int(type_), int(class), int(ttl), data} 
+    return DNSRecord{name, type_, class, ttl, data} 
 }
 
 func (r *ResponseRead) parseHeader() DNSHeader {
@@ -96,6 +96,11 @@ func (r *ResponseRead) parseHeader() DNSHeader {
 
 func (r *ResponseRead) readInt() int {
     b := r.getSlice(UINT16_SIZE) 
+    return int(binary.BigEndian.Uint16(b))
+}
+
+func (r *ResponseRead) readInt32() int {
+    b := r.getSlice(UINT32_SIZE) 
     return int(binary.BigEndian.Uint16(b))
 }
 
