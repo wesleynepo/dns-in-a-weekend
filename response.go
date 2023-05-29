@@ -28,8 +28,8 @@ func (r *ResponseRead) getSlice(width int) []byte {
     return r.data[r.pointer:r.pointer+width]
 }
 
-func findNameSize(b []byte) (int) {
-    for i, b := range b {
+func findNameSize(slice []byte) (int) {
+    for i, b := range slice {
         if b == 0 {
             return i
         }
@@ -42,23 +42,21 @@ func ipString(data []byte) string {
 }
 
 
-func getNameFromByte(response []byte, offset int) []byte {
-    nameStart := response[offset:]
+func (r *ResponseRead) getNameByOffset(offset int) []byte {
+    nameStart := r.data[offset:]
     nameSize := findNameSize(nameStart)
-    return response[offset:offset+nameSize]
+    return nameStart[:nameSize]
 }
 
-func getNameFromResponse(response *ResponseRead, nameSize int) []byte {
+func (r *ResponseRead) getName(nameSize int) []byte {
     var name []byte
-    index := 0
-    name = append(name, response.currentSlice()[:nameSize+1]...)
+    name = append(name, r.currentSlice()[:nameSize+1]...)
     for spot, b := range name {
         if b == 192 {
-            index = int(name[spot+1])
+            index := int(name[spot+1])
+            name = append(name[:len(name)-3], r.getNameByOffset(index)...)
+            break
         }
-    }
-    if index != 0 {
-        name = append(name[:len(name)-3], getNameFromByte(response.data, index)...)
     }
     return name
 }
@@ -67,7 +65,7 @@ func (r *ResponseRead) parseRecord() DNSRecord {
     var data []byte
     record := r.currentSlice()
     nameSize := findNameSize(record)
-    name := getNameFromResponse(r, nameSize)
+    name := r.getName(nameSize)
     r.movePointer(nameSize)
     
     type_ := r.readInt() 
@@ -75,11 +73,12 @@ func (r *ResponseRead) parseRecord() DNSRecord {
     ttl := r.readInt32() 
     byteLen := r.readInt() 
     if type_ == TYPE_NS {
-        data = getNameFromResponse(r, int(byteLen)-1)
+        data = r.getName(byteLen-1)
     } else {
-        data =record[nameSize+10:nameSize+10+int(byteLen)]
+        data =record[nameSize+10:nameSize+10+byteLen]
     }
     r.movePointer(int(byteLen))
+
     return DNSRecord{name, type_, class, ttl, data} 
 }
 
