@@ -72,12 +72,13 @@ func (r *ResponseRead) parseRecord() DNSRecord {
     class := r.readInt() 
     ttl := r.readInt32() 
     byteLen := r.readInt() 
+
     if type_ == TYPE_NS {
         data = r.getName(byteLen-1)
+        r.movePointer(int(byteLen))
     } else {
-        data =record[nameSize+10:nameSize+10+byteLen]
+        data = r.getSlice(byteLen)
     }
-    r.movePointer(int(byteLen))
 
     return DNSRecord{name, type_, class, ttl, data} 
 }
