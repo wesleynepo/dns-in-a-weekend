@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -16,6 +17,10 @@ const (
     TYPE_NS = 2
 )
 
+func ipString(data []byte) string {
+    return fmt.Sprintf("%v.%v.%v.%v", data[0], data[1], data[2], data[3])
+}
+
 func encodeName(domain string) []byte {
     buf := new(bytes.Buffer) 
     for _, part := range strings.Split(domain, ".") {
@@ -26,7 +31,6 @@ func encodeName(domain string) []byte {
     return buf.Bytes() 
 }
 
-// refactor seems to complicated
 func decodeName(encoded []byte) string {
     var name string
     var i int 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 const (
@@ -36,11 +35,6 @@ func findNameSize(slice []byte) (int) {
     }
     return 0
 }
-
-func ipString(data []byte) string {
-    return fmt.Sprintf("%v.%v.%v.%v", data[0], data[1], data[2], data[3])
-}
-
 
 func (r *ResponseRead) getNameByOffset(offset int) []byte {
     nameStart := r.data[offset:]
